@@ -1,5 +1,5 @@
 #imports
-import requests,json,discord,logging,asyncio
+import requests,json,discord,logging,asyncio,sys
 from datetime import datetime
 
 #load config
@@ -30,6 +30,9 @@ already_pinged = False
 all_time_low_val = -1
 all_time_low_str = ""
 all_time_low_date = ""
+
+#error handling
+error_count = 0
 
 #bot start
 @client.event
@@ -66,10 +69,14 @@ async def mainloop():
     while not client.is_closed():
         #cookie
         response = requests.get("https://api.hypixel.net/v2/skyblock/bazaar")
-        data = response.json()
-        last_updated_timestamp = data["lastUpdated"]
-        booster_cookie = data["products"]["BOOSTER_COOKIE"]
-        buy_price = booster_cookie["buy_summary"][0]["pricePerUnit"]
+        try:
+            data = response.json()
+            last_updated_timestamp = data["lastUpdated"]
+            booster_cookie = data["products"]["BOOSTER_COOKIE"]
+            buy_price = booster_cookie["buy_summary"][0]["pricePerUnit"]
+        except json.JSONDecodeError as e:
+            await err(e)
+            continue
 
         last_updated_date = datetime.fromtimestamp(last_updated_timestamp/1000)
         formatted_date = last_updated_date.strftime("%d.%m.%Y %H:%M:%S")
@@ -78,11 +85,15 @@ async def mainloop():
 
         #bank
         response = requests.get(profile_url)
-        data = response.json()
-        if data["success"]:
-            bank = data["profile"].get("banking",{}).get("balance",-1)
-        else:
-            bank = "ERR"
+        try:
+            data = response.json()
+            if data["success"]:
+                bank = data["profile"].get("banking",{}).get("balance",-1)
+            else:
+                bank = "ERR"
+        except json.JSONDecodeError as e:
+            await err(e)
+            continue
 
         formatted_bank = f"{bank:,.2f}"
 
@@ -126,7 +137,16 @@ async def mainloop():
             already_pinged = True
 
         #wait
-        await asyncio.sleep(10)
+        await asyncio.sleep((error_count+1)*10)
+
+async def err(e):
+    global error_count
+    error_count+=1
+    print(f"Error catched, {error_count}/5: {e}")
+    if error_count == 1:
+        await client.get_channel(channel_id).send(f"{mention_me} help, look console!")
+    elif error_count == 5:
+        await client.close()
 
 #run client
 client.run(token=token,log_level=logging.WARN)

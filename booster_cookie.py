@@ -90,12 +90,15 @@ async def mainloop():
             if data["success"]:
                 bank = data["profile"].get("banking",{}).get("balance",-1)
             else:
-                bank = "ERR"
+                bank = -1
         except json.JSONDecodeError as e:
             await err(e)
             continue
 
-        formatted_bank = f"{bank:,.2f}"
+        if bank > -1:
+            formatted_bank = f"{bank:,.2f}"
+        else:
+            formatted_bank = "No Data"
 
         final_string = f"{formatted_date}: {formatted_bank} / {formatted_buy}"
 

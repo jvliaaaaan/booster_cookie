@@ -31,6 +31,9 @@ all_time_low_val = -1
 all_time_low_str = ""
 all_time_low_date = ""
 
+#settings
+default_wait_time = 30
+
 #error handling
 error_count = 0
 
@@ -66,81 +69,91 @@ async def on_reaction_add(reaction: discord.Reaction, user: discord.User):
 #main
 async def mainloop():
     global message,already_pinged,ping_message,all_time_low_val,all_time_low_str,all_time_low_date
+    wait_time = default_wait_time
     while not client.is_closed():
-        #cookie
-        response = requests.get("https://api.hypixel.net/v2/skyblock/bazaar")
         try:
+            #cookie
+            response = requests.get("https://api.hypixel.net/v2/skyblock/bazaar")
+            response.raise_for_status()
             data = response.json()
+
             last_updated_timestamp = data["lastUpdated"]
             booster_cookie = data["products"]["BOOSTER_COOKIE"]
             buy_price = booster_cookie["buy_summary"][0]["pricePerUnit"]
-        except json.JSONDecodeError as e:
-            await err(e)
-            continue
 
-        last_updated_date = datetime.fromtimestamp(last_updated_timestamp/1000)
-        formatted_date = last_updated_date.strftime("%d.%m.%Y %H:%M:%S")
+            last_updated_date = datetime.fromtimestamp(last_updated_timestamp/1000)
+            formatted_date = last_updated_date.strftime("%d.%m.%Y %H:%M:%S")
 
-        formatted_buy = f"{buy_price:,.2f}"
+            formatted_buy = f"{buy_price:,.2f}"
 
-        #bank
-        response = requests.get(profile_url)
-        try:
+            #bank
+            response = requests.get(profile_url)
+            response.raise_for_status()
             data = response.json()
+
             if data["success"]:
                 bank = data["profile"].get("banking",{}).get("balance",-1)
             else:
                 bank = -1
-        except json.JSONDecodeError as e:
+
+            if bank > -1:
+                formatted_bank = f"{bank:,.2f}"
+            else:
+                formatted_bank = "No Data"
+
+            final_string = f"{formatted_date}: {formatted_bank} / {formatted_buy}"
+
+            #update all time low
+            if all_time_low_val == -1 or all_time_low_val > buy_price:
+                all_time_low_val = buy_price
+                all_time_low_str = formatted_buy
+                all_time_low_date = formatted_date
+
+            #print in console
+            print(final_string)
+
+            #get channel
+            channel: discord.TextChannel = client.get_channel(channel_id)
+
+            #create embed
+            embed = discord.Embed(
+                title="Booster Cookie",
+                description=formatted_buy,
+                color=discord.Color.blue()
+            )
+            thumbnail = discord.File("./booster_cookie.png",filename="booster_cookie.png")
+            embed.set_thumbnail(url="attachment://booster_cookie.png")
+            embed.add_field(name="Bank",value=formatted_bank,inline=False)
+            embed.add_field(name="All-Time-Low",value=f"{all_time_low_str}\n({all_time_low_date})")
+            embed.set_footer(text=formatted_date)
+
+            #send message
+            if message != None:
+                await message.edit(embed=embed)
+            else:
+                message = await channel.send(file=thumbnail,embed=embed)
+
+            #ping if can buy
+            if bank != -1 and buy_price <= bank and not already_pinged:
+                ping_message = await channel.send(mention_me)
+                emoji = discord.PartialEmoji(name="booster_cookie",id=1305850403681730640)
+                await ping_message.add_reaction(emoji)
+                already_pinged = True
+
+            #dynamic wait time between pings
+            remaining_requests = int(response.headers.get("RateLimit-Remaining",1))
+            reset_time = int(response.headers.get("RateLimit-Reset",default_wait_time))
+
+            if remaining_requests <= 1:
+                wait_time = reset_time
+            else:
+                wait_time = (error_count+1)*default_wait_time
+        except (requests.RequestException, json.JSONDecodeError) as e:
             await err(e)
             continue
 
-        if bank > -1:
-            formatted_bank = f"{bank:,.2f}"
-        else:
-            formatted_bank = "No Data"
-
-        final_string = f"{formatted_date}: {formatted_bank} / {formatted_buy}"
-
-        #update all time low
-        if all_time_low_val == -1 or all_time_low_val > buy_price:
-            all_time_low_val = buy_price
-            all_time_low_str = formatted_buy
-            all_time_low_date = formatted_date
-
-        #print in console
-        print(final_string)
-
-        #get channel
-        channel: discord.TextChannel = client.get_channel(channel_id)
-
-        #create embed
-        embed = discord.Embed(
-            title="Booster Cookie",
-            description=formatted_buy,
-            color=discord.Color.blue()
-        )
-        thumbnail = discord.File("./booster_cookie.png",filename="booster_cookie.png")
-        embed.set_thumbnail(url="attachment://booster_cookie.png")
-        embed.add_field(name="Bank",value=formatted_bank,inline=False)
-        embed.add_field(name="All-Time-Low",value=f"{all_time_low_str}\n({all_time_low_date})")
-        embed.set_footer(text=formatted_date)
-
-        #send message
-        if message != None:
-            await message.edit(embed=embed)
-        else:
-            message = await channel.send(file=thumbnail,embed=embed)
-
-        #ping if can buy
-        if bank != -1 and buy_price <= bank and not already_pinged:
-            ping_message = await channel.send(mention_me)
-            emoji = discord.PartialEmoji(name="booster_cookie",id=1305850403681730640)
-            await ping_message.add_reaction(emoji)
-            already_pinged = True
-
         #wait
-        await asyncio.sleep((error_count+1)*10)
+        await asyncio.sleep(wait_time)
 
 async def err(e):
     global error_count

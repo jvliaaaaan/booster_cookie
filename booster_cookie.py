@@ -27,15 +27,16 @@ ping_message: discord.Message = None
 already_pinged = False
 
 #data
+bank = -1
+bank_date = ""
 all_time_low_val = -1
 all_time_low_str = ""
 all_time_low_date = ""
-
-#settings
-default_wait_time = 30
+poll_bank_interval = 15
 
 #error handling
 error_count = 0
+error_message: discord.Message = None
 
 #bot start
 @client.event
@@ -47,29 +48,49 @@ async def on_ready():
     if not loop_running:
         client.loop.create_task(mainloop())
         loop_running = True
+    
+    print(f"But running as {client.user}")
 
 #reaction added
 @client.event
 async def on_reaction_add(reaction: discord.Reaction, user: discord.User):
-    global ping_message,already_pinged
+    global ping_message,already_pinged,error_message,error_count
     valid_reaction = False
 
-    if ping_message is not None and reaction.message.id == ping_message.id: #message check
+    is_ping_message = (ping_message is not None and reaction.message.id == ping_message.id)
+    is_error_message = (error_message is not None and reaction.message.id == error_message.id)
+
+    if is_ping_message or is_error_message: #message check
         if reaction.is_custom_emoji() and reaction.emoji.name == "booster_cookie" and reaction.emoji.id == 1305850403681730640: #reaction check
             valid_reaction = True
             if user.id == my_id:
-                await ping_message.delete()
-                ping_message = None
-                already_pinged = False
+                if is_ping_message:
+                    await ping_message.delete()
+                    ping_message = None
+                    already_pinged = False
+                else:
+                    await error_message.delete()
+                    error_message = None
+                    error_count = 0
 
     #remove if reaction invalid
     if not valid_reaction:
         await reaction.remove(user)
 
+#other functions
+def get_emoji() -> discord.PartialEmoji:
+    return discord.PartialEmoji(name="booster_cookie",id=1305850403681730640)
+
+def format_date(date: str):
+    return date.strftime("%d.%m.%Y %H:%M:%S")
+
+def format_float(val: float):
+    return f"{val:,.2f}"
+
 #main
 async def mainloop():
-    global message,already_pinged,ping_message,all_time_low_val,all_time_low_str,all_time_low_date
-    wait_time = default_wait_time
+    global message,already_pinged,ping_message,all_time_low_val,all_time_low_str,all_time_low_date,bank,bank_date
+    poll_bank = 0
     while not client.is_closed():
         try:
             #cookie
@@ -82,35 +103,32 @@ async def mainloop():
             buy_price = booster_cookie["buy_summary"][0]["pricePerUnit"]
 
             last_updated_date = datetime.fromtimestamp(last_updated_timestamp/1000)
-            formatted_date = last_updated_date.strftime("%d.%m.%Y %H:%M:%S")
+            formatted_date = format_date(last_updated_date)
 
-            formatted_buy = f"{buy_price:,.2f}"
+            formatted_buy = format_float(buy_price)
 
             #bank
-            response = requests.get(profile_url)
-            response.raise_for_status()
-            data = response.json()
-
-            if data["success"]:
-                bank = data["profile"].get("banking",{}).get("balance",-1)
+            if poll_bank > 0:
+                poll_bank-=1
             else:
-                bank = -1
+                poll_bank = poll_bank_interval
+                response = requests.get(profile_url)
+                response.raise_for_status()
+                data = response.json()
 
-            if bank > -1:
-                formatted_bank = f"{bank:,.2f}"
-            else:
-                formatted_bank = "No Data"
-
-            final_string = f"{formatted_date}: {formatted_bank} / {formatted_buy}"
+                if data["success"]:
+                    bank = data["profile"].get("banking",{}).get("balance",-1)
+                if bank >= 0:
+                    formatted_bank = format_float(bank)
+                    bank_date = format_date(datetime.now())
+                else:
+                    formatted_bank = "No Data"
 
             #update all time low
             if all_time_low_val == -1 or all_time_low_val > buy_price:
                 all_time_low_val = buy_price
                 all_time_low_str = formatted_buy
                 all_time_low_date = formatted_date
-
-            #print in console
-            print(final_string)
 
             #get channel
             channel: discord.TextChannel = client.get_channel(channel_id)
@@ -123,7 +141,7 @@ async def mainloop():
             )
             thumbnail = discord.File("./booster_cookie.png",filename="booster_cookie.png")
             embed.set_thumbnail(url="attachment://booster_cookie.png")
-            embed.add_field(name="Bank",value=formatted_bank,inline=False)
+            embed.add_field(name="Bank",value=f"{formatted_bank}\n({bank_date})",inline=False)
             embed.add_field(name="All-Time-Low",value=f"{all_time_low_str}\n({all_time_low_date})")
             embed.set_footer(text=formatted_date)
 
@@ -136,31 +154,25 @@ async def mainloop():
             #ping if can buy
             if bank != -1 and buy_price <= bank and not already_pinged:
                 ping_message = await channel.send(mention_me)
-                emoji = discord.PartialEmoji(name="booster_cookie",id=1305850403681730640)
+                emoji = get_emoji()
                 await ping_message.add_reaction(emoji)
                 already_pinged = True
-
-            #dynamic wait time between pings
-            remaining_requests = int(response.headers.get("RateLimit-Remaining",1))
-            reset_time = int(response.headers.get("RateLimit-Reset",default_wait_time))
-
-            if remaining_requests <= 1:
-                wait_time = reset_time
-            else:
-                wait_time = (error_count+1)*default_wait_time
         except (requests.RequestException, json.JSONDecodeError) as e:
             await err(e)
             continue
 
         #wait
-        await asyncio.sleep(wait_time)
+        await asyncio.sleep((error_count+1)*20)
 
+#error handling
 async def err(e):
-    global error_count
+    global error_count,error_message
     error_count+=1
     print(f"Error catched, {error_count}/5: {e}")
     if error_count == 1:
-        await client.get_channel(channel_id).send(f"{mention_me} help, look console!")
+        error_message = await client.get_channel(channel_id).send(f"{mention_me} help, look console!")
+        emoji = get_emoji
+        await error_message.add_reaction(emoji)
     elif error_count == 5:
         await client.close()
 

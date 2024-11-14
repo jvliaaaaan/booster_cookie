@@ -171,7 +171,7 @@ async def err(e):
     print(f"Error catched, {error_count}/5: {e}")
     if error_count == 1:
         error_message = await client.get_channel(channel_id).send(f"{mention_me} help, look console!")
-        emoji = get_emoji
+        emoji = get_emoji()
         await error_message.add_reaction(emoji)
     elif error_count == 5:
         await client.close()

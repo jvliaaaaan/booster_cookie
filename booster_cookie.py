@@ -124,10 +124,10 @@ async def mainloop():
                     bank = data["profile"].get("banking",{}).get("balance",-1)
                     ping_dismissed = False
                 if bank >= 0:
-                    formatted_bank = format_float(bank)
                     bank_date = format_date(datetime.now())
                 else:
                     formatted_bank = "No Data"
+            formatted_bank = format_float(bank)
 
             #update all time low
             if all_time_low_val == -1 or all_time_low_val > buy_price:

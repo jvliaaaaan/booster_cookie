@@ -13,7 +13,10 @@ api_key = config["api_key"]
 uuid = 'a4907648-ada0-43ea-abcc-487a856b440e'
 profile_id = '900b4bed-8a07-4f12-88b8-7b3022bc137c'
 uuid_key = uuid.replace("-","")
-profile_url = f"https://api.hypixel.net/v2/skyblock/profile?key={api_key}&uuid={uuid}&profile={profile_id}"
+profile_url = f"https://api.hypixel.net/v2/skyblock/profile?uuid={uuid}&profile={profile_id}"
+headers = {
+    "API-Key": api_key
+}
 
 #discord
 intents = discord.Intents.all()
@@ -116,7 +119,7 @@ async def mainloop():
                 poll_bank-=1
             else:
                 poll_bank = poll_bank_interval
-                response = requests.get(profile_url)
+                response = requests.get(profile_url,headers=headers)
                 response.raise_for_status()
                 data = response.json()
 

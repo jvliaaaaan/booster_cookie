@@ -24,7 +24,10 @@ channel_id = 1305841186514403421
 my_id = 173015465638100993
 mention_me = f"<@{my_id}>"
 ping_message: discord.Message = None
+
+#notify
 already_pinged = False
+ping_dismissed = False
 
 #data
 bank = -1
@@ -54,7 +57,7 @@ async def on_ready():
 #reaction added
 @client.event
 async def on_reaction_add(reaction: discord.Reaction, user: discord.User):
-    global ping_message,already_pinged,error_message,error_count
+    global ping_message,already_pinged,error_message,error_count,ping_dismissed
     valid_reaction = False
 
     is_ping_message = (ping_message is not None and reaction.message.id == ping_message.id)
@@ -68,6 +71,7 @@ async def on_reaction_add(reaction: discord.Reaction, user: discord.User):
                     await ping_message.delete()
                     ping_message = None
                     already_pinged = False
+                    ping_dismissed = True
                 else:
                     await error_message.delete()
                     error_message = None
@@ -89,7 +93,7 @@ def format_float(val: float):
 
 #main
 async def mainloop():
-    global message,already_pinged,ping_message,all_time_low_val,all_time_low_str,all_time_low_date,bank,bank_date
+    global message,already_pinged,ping_message,all_time_low_val,all_time_low_str,all_time_low_date,bank,bank_date,ping_dismissed,error_count
     poll_bank = 0
     while not client.is_closed():
         try:
@@ -118,6 +122,7 @@ async def mainloop():
 
                 if data["success"]:
                     bank = data["profile"].get("banking",{}).get("balance",-1)
+                    ping_dismissed = False
                 if bank >= 0:
                     formatted_bank = format_float(bank)
                     bank_date = format_date(datetime.now())
@@ -152,11 +157,13 @@ async def mainloop():
                 message = await channel.send(file=thumbnail,embed=embed)
 
             #ping if can buy
-            if bank != -1 and buy_price <= bank and not already_pinged:
-                ping_message = await channel.send(mention_me)
+            if bank != -1 and buy_price <= bank and not already_pinged and not ping_dismissed:
+                ping_message = await channel.send(f"{mention_me} You can buy!")
                 emoji = get_emoji()
                 await ping_message.add_reaction(emoji)
                 already_pinged = True
+            
+            error_count-=1
         except (requests.RequestException, json.JSONDecodeError) as e:
             await err(e)
             continue
@@ -169,11 +176,8 @@ async def err(e):
     global error_count,error_message
     error_count+=1
     print(f"Error catched, {error_count}/5: {e}")
-    if error_count == 1:
-        error_message = await client.get_channel(channel_id).send(f"{mention_me} help, look console!")
-        emoji = get_emoji()
-        await error_message.add_reaction(emoji)
-    elif error_count == 5:
+    if error_count == 5:
+        await client.get_channel(channel_id).send(f"{mention_me} too many errors. Shutting down!")
         await client.close()
 
 #run client

@@ -166,7 +166,8 @@ async def mainloop():
                 await ping_message.add_reaction(emoji)
                 already_pinged = True
             
-            error_count-=1
+            if error_count > 0:
+                error_count-=1
         except (requests.RequestException, json.JSONDecodeError) as e:
             await err(e)
             continue

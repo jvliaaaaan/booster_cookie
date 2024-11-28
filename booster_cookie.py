@@ -141,17 +141,19 @@ async def mainloop():
             #get channel
             channel: discord.TextChannel = client.get_channel(channel_id)
 
+            #prepare symbols
+            all_time_low_sym = "🕒" if buy_price == all_time_low_val else ""
+
             #create embed
             embed = discord.Embed(
                 title="Booster Cookie",
-                description=formatted_buy,
                 color=discord.Color.blue()
             )
             thumbnail = discord.File("./booster_cookie.png",filename="booster_cookie.png")
             embed.set_thumbnail(url="attachment://booster_cookie.png")
-            embed.add_field(name="Bank",value=f"{formatted_bank}\n({bank_date})",inline=False)
-            embed.add_field(name="All-Time-Low",value=f"{all_time_low_str}\n({all_time_low_date})")
-            embed.set_footer(text=formatted_date)
+            embed.add_field(name="Cookie Price",value=f"{formatted_buy} - {format_date}")
+            embed.add_field(name="Bank",value=f"{formatted_bank} - {bank_date}",inline=False)
+            embed.add_field(name="All-Time-Low",value=f"{all_time_low_sym}{all_time_low_str} - {all_time_low_date}")
 
             #send message
             if message != None:

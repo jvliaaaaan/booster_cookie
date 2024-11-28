@@ -151,7 +151,7 @@ async def mainloop():
             )
             thumbnail = discord.File("./booster_cookie.png",filename="booster_cookie.png")
             embed.set_thumbnail(url="attachment://booster_cookie.png")
-            embed.add_field(name="Cookie Price",value=f"{formatted_buy} - {format_date}")
+            embed.add_field(name="Cookie Price",value=f"{formatted_buy} - {formatted_date}")
             embed.add_field(name="Bank",value=f"{formatted_bank} - {bank_date}",inline=False)
             embed.add_field(name="All-Time-Low",value=f"{all_time_low_sym}{all_time_low_str} - {all_time_low_date}")
 
